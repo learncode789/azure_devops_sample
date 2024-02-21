@@ -1,0 +1,49 @@
+trigger: none
+
+pr: none
+
+parameters:
+- name: helmChartVersion
+  displayName: 'Helm Chart Version (Major.Minor.BuildNumber)'
+  type: string
+
+name: $(Date:yyyyMMdd)$(Rev:.r)_deploy_version_${{ parameters.helmChartVersion }}
+
+stages:
+- stage: Staging
+  displayName: 'Staging Environment'
+  variables:
+  - group: test-group
+  - group: Terraform-Stag
+  - group: test-vault
+  - template: ../../../common/cd-vars-template.yaml
+    parameters:
+      projectName: p-app-test1-report-processor
+      projectPath: charts/test
+      k8sNamespace: core
+      projectVersionMajor: 1
+      projectVersionMinor: 0
+      projectBuildNumber: $[counter(variables['ProjectVersionMajor'].variables['ProjectVersionMinor'], 0)]
+      release_version: $(projectVersionMajor).$(projectVersionMinor).$(projectBuildNumber)
+      testUpackArtifactsFeeds: c3a6c028-100d-4f9e-88cf-0868228f220d/042f8142-3d1b-4510-b1f0-0d1aecf172ea
+      viewID: 56c3dda1-8e2c-4a5a-80b5-5a369be05aad
+      definitionID: $(projectName).tgz
+      values: values/test-stag-values.yaml
+      set: base.database.test.apiUser.password='$(data-apiuser)',base.database.cassandra.test1.test1user.password='$(cassandra-user)',base.messagingService.activeMQ.password='$(messagingservice-activemq-admin)',base.applicationInsights.connectionString='$(application-insights-connection-string)'
+  jobs:
+  - deployment: Staging
+    displayName: 'Deployment'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'Staging'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - bash: echo "##vso[task.setvariable variable=upackVersion]${{ parameters.helmChartVersion }}"
+            name: set_var_upackVersion
+          - bash: echo "helmChartVersion $(upackVersion)"
+            name: display_helmChartVersion
+          - checkout: self
+            clean: true
+   
